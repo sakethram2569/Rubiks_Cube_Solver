@@ -13,6 +13,10 @@ public:
     enum Corner { URF, UFL, ULB, UBR, DFR, DLF, DBL, DRB };
     enum Edge { UR, UF, UL, UB, DR, DF, DL, DB, FR, FL, BL, BR };
 
+    // The six faces. A "move" is a face + how many clockwise quarter turns:
+    // 1 = clockwise, 2 = 180 degrees, 3 = counterclockwise
+    enum Face { U, D, L, R, F, B };
+
     Cube(); // builds a solved cube
 
     bool operator==(const Cube& other) const;
@@ -21,6 +25,7 @@ public:
     friend std::ostream& operator<<(std::ostream& os, const Cube& c);
 
     bool isSolved() const;
+    void move(Face face, int turns);
 
 private:
     std::array<int, NUM_CORNERS> cp; // corner permutation: which piece is at slot i
