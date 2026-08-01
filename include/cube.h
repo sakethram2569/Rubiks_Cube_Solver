@@ -27,6 +27,11 @@ public:
     bool isSolved() const;
     void move(Face face, int turns);
 
+    // Read-only access to corner state -- needed by the pattern database
+    // (Phase 4) to index into its distance table.
+    std::array<int, NUM_CORNERS> cornerPerm() const { return cp; }
+    std::array<int, NUM_CORNERS> cornerOrient() const { return co; }
+
 private:
     std::array<int, NUM_CORNERS> cp; // corner permutation: which piece is at slot i
     std::array<int, NUM_CORNERS> co; // corner orientation: 0, 1, or 2
