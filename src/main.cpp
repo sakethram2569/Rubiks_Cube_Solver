@@ -1,46 +1,108 @@
 #include "cube.h"
+#include "search.h"
 #include <iostream>
+#include <iomanip>
+#include <chrono>
+#include <vector>
 
-void testOrderFour(Cube::Face face, const char* name) {
-    Cube c;
-    for (int i = 0; i < 4; ++i) c.move(face, 1);
-    std::cout << name << " applied 4 times returns to solved: "
-              << (c.isSolved() ? "PASS" : "FAIL") << "\n";
+using Clock = std::chrono::steady_clock;
+
+double elapsedMs(Clock::time_point start, Clock::time_point end) {
+    return std::chrono::duration<double, std::milli>(end - start).count();
+}
+
+void printMoves(const std::vector<Move>& moves) {
+    for (size_t i = 0; i < moves.size(); ++i) {
+        std::cout << moveToString(moves[i]);
+        if (i + 1 < moves.size()) std::cout << " ";
+    }
+}
+
+void summarize(const char* name, const std::vector<double>& times, int trials) {
+    std::cout << name << ": " << times.size() << "/" << trials << " solved.";
+    if (!times.empty()) {
+        double sum = 0, mx = 0;
+        for (double v : times) { sum += v; if (v > mx) mx = v; }
+        std::cout << " avg " << std::fixed << std::setprecision(1) << (sum / times.size())
+                  << " ms, max " << mx << " ms.";
+    }
+    std::cout << "\n";
 }
 
 int main() {
-    // Test 1: any single quarter turn, applied 4 times, must return to solved
-    testOrderFour(Cube::U, "U");
-    testOrderFour(Cube::D, "D");
-    testOrderFour(Cube::L, "L");
-    testOrderFour(Cube::R, "R");
-    testOrderFour(Cube::F, "F");
-    testOrderFour(Cube::B, "B");
+    const int SCRAMBLE_LEN = 8;
+    const int TRIALS = 5;
+    const long long BFS_NODE_LIMIT = 5000000; // roughly ~850 MB worth of nodes
 
-    // Test 2: the famous "sexy move" (R U R' U') has order 6
-    Cube c3;
-    for (int i = 0; i < 6; ++i) {
-        c3.move(Cube::R, 1);
-        c3.move(Cube::U, 1);
-        c3.move(Cube::R, 3); // R'
-        c3.move(Cube::U, 3); // U'
+    std::cout << "Benchmarking BFS / DFS / IDDFS on " << TRIALS
+              << " random " << SCRAMBLE_LEN << "-move scrambles.\n\n";
+
+    std::vector<double> dfsTimes, iddfsTimes, bfsTimes;
+
+    for (int t = 1; t <= TRIALS; ++t) {
+        ScrambleResult sc = generateScramble(SCRAMBLE_LEN);
+        std::cout << "Scramble " << t << "/" << TRIALS << ": ";
+        printMoves(sc.moves);
+        std::cout << "\n";
+
+        {
+            long long nodes = 0;
+            auto start = Clock::now();
+            auto result = solveDFS(sc.cube, SCRAMBLE_LEN, nodes);
+            double ms = elapsedMs(start, Clock::now());
+            if (result) {
+                dfsTimes.push_back(ms);
+                Cube check = sc.cube;
+                for (auto& m : *result) check.move(m.face, m.turns);
+                std::cout << "  DFS:    " << std::fixed << std::setprecision(1) << ms
+                          << " ms, " << nodes << " nodes, " << result->size()
+                          << " moves, verify: " << (check.isSolved() ? "OK" : "BROKEN") << "\n";
+            } else {
+                std::cout << "  DFS:    no solution within depth " << SCRAMBLE_LEN
+                          << " (" << nodes << " nodes, " << ms << " ms)\n";
+            }
+        }
+        {
+            long long nodes = 0;
+            auto start = Clock::now();
+            auto result = solveIDDFS(sc.cube, SCRAMBLE_LEN, nodes);
+            double ms = elapsedMs(start, Clock::now());
+            if (result) {
+                iddfsTimes.push_back(ms);
+                Cube check = sc.cube;
+                for (auto& m : *result) check.move(m.face, m.turns);
+                std::cout << "  IDDFS:  " << std::fixed << std::setprecision(1) << ms
+                          << " ms, " << nodes << " nodes, " << result->size()
+                          << " moves, verify: " << (check.isSolved() ? "OK" : "BROKEN") << "\n";
+            } else {
+                std::cout << "  IDDFS:  no solution within depth " << SCRAMBLE_LEN
+                          << " (" << nodes << " nodes, " << ms << " ms)\n";
+            }
+        }
+        {
+            long long nodes = 0;
+            auto start = Clock::now();
+            auto result = solveBFS(sc.cube, SCRAMBLE_LEN, nodes, BFS_NODE_LIMIT);
+            double ms = elapsedMs(start, Clock::now());
+            if (result) {
+                bfsTimes.push_back(ms);
+                Cube check = sc.cube;
+                for (auto& m : *result) check.move(m.face, m.turns);
+                std::cout << "  BFS:    " << std::fixed << std::setprecision(1) << ms
+                          << " ms, " << nodes << " nodes, " << result->size()
+                          << " moves, verify: " << (check.isSolved() ? "OK" : "BROKEN") << "\n";
+            } else {
+                std::cout << "  BFS:    hit node limit (" << BFS_NODE_LIMIT
+                          << ") before finding a solution (" << ms << " ms)\n";
+            }
+        }
+        std::cout << "\n";
     }
-    std::cout << "(R U R' U') x6 returns to solved: "
-              << (c3.isSolved() ? "PASS" : "FAIL") << "\n";
 
-    // Test 3: scramble, then apply the exact inverse sequence
-    Cube c4;
-    c4.move(Cube::R, 1);
-    c4.move(Cube::U, 2);
-    c4.move(Cube::F, 3);
-    c4.move(Cube::L, 1);
-    // inverse: reverse order, and invert each turn (1<->3, 2 stays 2)
-    c4.move(Cube::L, 3);
-    c4.move(Cube::F, 1);
-    c4.move(Cube::U, 2);
-    c4.move(Cube::R, 3);
-    std::cout << "Scramble + exact inverse returns to solved: "
-              << (c4.isSolved() ? "PASS" : "FAIL") << "\n";
+    std::cout << "=== Summary ===\n";
+    summarize("DFS  ", dfsTimes, TRIALS);
+    summarize("IDDFS", iddfsTimes, TRIALS);
+    summarize("BFS  ", bfsTimes, TRIALS);
 
     return 0;
 }
