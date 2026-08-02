@@ -2,58 +2,64 @@
 #include "search.h"
 #include "pdb.h"
 #include <iostream>
+#include <iomanip>
+#include <chrono>
+#include <vector>
+
+using Clock = std::chrono::steady_clock;
+
+double elapsedMs(Clock::time_point start, Clock::time_point end) {
+    return std::chrono::duration<double, std::milli>(end - start).count();
+}
+
+void printMoves(const std::vector<Move>& moves) {
+    for (size_t i = 0; i < moves.size(); ++i) {
+        std::cout << moveToString(moves[i]);
+        if (i + 1 < moves.size()) std::cout << " ";
+    }
+}
+
+void runBenchmark(const std::vector<uint8_t>& pdb, int scrambleLen, int trials) {
+    std::cout << "\n=== " << scrambleLen << "-move scrambles (" << trials << " trials) ===\n";
+    std::vector<double> times;
+
+    for (int t = 1; t <= trials; ++t) {
+        ScrambleResult sc = generateScramble(scrambleLen);
+        std::cout << "Scramble " << t << "/" << trials << ": ";
+        printMoves(sc.moves);
+        std::cout << "\n";
+
+        long long nodes = 0;
+        auto start = Clock::now();
+        auto result = solveIDAStar(sc.cube, pdb, nodes);
+        double ms = elapsedMs(start, Clock::now());
+
+        if (result) {
+            times.push_back(ms);
+            Cube check = sc.cube;
+            for (auto& m : *result) check.move(m.face, m.turns);
+            std::cout << "  IDA*: " << std::fixed << std::setprecision(1) << ms
+                      << " ms, " << nodes << " nodes, " << result->size()
+                      << " moves, verify: " << (check.isSolved() ? "OK" : "BROKEN") << "\n";
+        } else {
+            std::cout << "  IDA*: no solution found (" << ms << " ms, " << nodes << " nodes)\n";
+        }
+    }
+
+    if (!times.empty()) {
+        double sum = 0, mx = 0;
+        for (double v : times) { sum += v; if (v > mx) mx = v; }
+        std::cout << scrambleLen << "-move summary: " << times.size() << "/" << trials
+                  << " solved. avg " << std::fixed << std::setprecision(1) << (sum / times.size())
+                  << " ms, max " << mx << " ms.\n";
+    }
+}
 
 int main() {
     std::vector<uint8_t> pdb = getCornerPDB("../corner_pdb.bin");
 
-    long long filled = 0;
-    int maxDist = 0;
-    for (uint8_t d : pdb) {
-        if (d != 0xFF) {
-            ++filled;
-            if (d > maxDist) maxDist = d;
-        }
-    }
-    std::cout << "\nPDB stats: " << filled << " / " << NUM_CORNER_STATES
-              << " states filled, max distance = " << maxDist << "\n";
-    if (filled != NUM_CORNER_STATES) {
-        std::cout << "WARNING: not every corner state was reached -- "
-                     "something is likely wrong with the move tables or indexing.\n";
-    }
-
-    std::cout << "\n--- Sanity checks ---\n";
-    Cube solved;
-    int solvedDist = cornerDistance(pdb, solved);
-    std::cout << "Solved cube distance: " << solvedDist
-               << (solvedDist == 0 ? "  OK" : "  FAIL") << "\n";
-
-    bool allSingleMovesOne = true;
-    for (int f = 0; f < 6; ++f) {
-        for (int t = 1; t <= 3; ++t) {
-            Cube c;
-            c.move(static_cast<Cube::Face>(f), t);
-            int d = cornerDistance(pdb, c);
-            if (d != 1) {
-                allSingleMovesOne = false;
-                std::cout << "  Face " << f << " turns " << t << " -> distance " << d << " (expected 1)\n";
-            }
-        }
-    }
-    std::cout << "All 18 single moves have corner-distance 1: "
-              << (allSingleMovesOne ? "OK" : "FAIL") << "\n";
-
-    std::cout << "\n--- Admissibility check (corner distance must never exceed scramble length) ---\n";
-    bool admissible = true;
-    for (int trial = 0; trial < 20; ++trial) {
-        int len = 4 + (trial % 9); // scramble lengths 4..12
-        ScrambleResult sc = generateScramble(len);
-        int h = cornerDistance(pdb, sc.cube);
-        bool ok = (h <= len);
-        if (!ok) admissible = false;
-        std::cout << "  scramble length " << len << ", corner-distance " << h
-                  << (ok ? "  OK" : "  FAIL (heuristic overestimated!)") << "\n";
-    }
-    std::cout << "Admissibility across 20 random scrambles: " << (admissible ? "OK" : "FAIL") << "\n";
+    runBenchmark(pdb, 8, 5);
+    runBenchmark(pdb, 13, 5);
 
     return 0;
 }

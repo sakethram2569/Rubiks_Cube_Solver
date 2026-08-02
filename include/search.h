@@ -5,6 +5,7 @@
 #include <vector>
 #include <optional>
 #include <string>
+#include <cstdint>
 
 struct Move {
     Cube::Face face;
@@ -38,5 +39,12 @@ std::optional<std::vector<Move>> solveIDDFS(Cube start, int maxDepthCap, long lo
 // every node it visits in memory. nodeLimit caps that growth — if it's hit
 // before a solution is found, this returns nullopt instead of exhausting RAM.
 std::optional<std::vector<Move>> solveBFS(Cube start, int maxDepth, long long& nodesVisited, long long nodeLimit);
+
+// IDA*: iterative deepening on f = g + h instead of raw depth, using the
+// corner pattern database as an admissible heuristic h. Guarantees the
+// shortest solution (like BFS/IDDFS) but the heuristic prunes far more of
+// the tree than plain depth pruning does, and memory stays O(depth) like
+// DFS — no node-storage blowup like BFS has.
+std::optional<std::vector<Move>> solveIDAStar(Cube start, const std::vector<uint8_t>& pdb, long long& nodesVisited);
 
 #endif
