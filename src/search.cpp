@@ -4,15 +4,11 @@
 #include <queue>
 #include <algorithm>
 #include <climits>
+#include <iostream>
 
 namespace {
     int axisOf(Cube::Face f) { return static_cast<int>(f) / 2; }
 
-    // Move pruning shared by scramble generation, DFS, BFS, and IDA*:
-    // - never repeat the same face twice in a row (redundant: U U = U2, already covered by turns)
-    // - for opposite faces on the same axis (U/D, L/R, F/B), which commute,
-    //   only allow the canonical order (lower enum value first) so "U D" and
-    //   "D U" aren't both explored as distinct branches for the same result
     bool allowedMove(Cube::Face face, Cube::Face prevFace, bool hasPrev) {
         if (!hasPrev) return true;
         if (face == prevFace) return false;
@@ -43,25 +39,27 @@ namespace {
                 if (dfsRecurse(current, depth + 1, maxDepth, face, true, path, nodesVisited))
                     return true;
                 path.pop_back();
-                current.move(face, 4 - turns); // undo: inverse of turns 1/2/3 is 3/2/1
+                current.move(face, 4 - turns);
             }
         }
         return false;
     }
 
-    // Sentinel meaning "found the goal" -- distinct from any real f-value,
-    // since f = g + h is always >= 0.
     constexpr int IDA_FOUND = -1;
+    constexpr int IDA_ABORT = -2; // hit the node cap -- give up cleanly, don't hang
 
-    // Standard IDA* recursive search. If the goal is found along this path,
-    // returns IDA_FOUND (path is left populated with the solution). If this
-    // branch is pruned (f > threshold), returns f so the caller can track
-    // the minimum such value -- that becomes next iteration's threshold.
     int idaRecurse(Cube& current, int g, int threshold,
                    Cube::Face prevFace, bool hasPrev,
-                   std::vector<Move>& path, long long& nodesVisited,
+                   std::vector<Move>& path, long long& nodesVisited, long long nodeLimit,
                    const std::vector<uint8_t>& pdb) {
         ++nodesVisited;
+
+        if (nodesVisited >= nodeLimit) return IDA_ABORT;
+        if (nodesVisited % 5000000 == 0) {
+            std::cout << "      ...still searching: " << nodesVisited
+                      << " nodes so far (threshold=" << threshold << ")\n";
+        }
+
         int h = cornerDistance(pdb, current);
         int f = g + h;
         if (f > threshold) return f;
@@ -74,8 +72,16 @@ namespace {
             for (int turns = 1; turns <= 3; ++turns) {
                 current.move(face, turns);
                 path.push_back({face, turns});
-                int t = idaRecurse(current, g + 1, threshold, face, true, path, nodesVisited, pdb);
-                if (t == IDA_FOUND) return IDA_FOUND;
+                int t = idaRecurse(current, g + 1, threshold, face, true, path, nodesVisited, nodeLimit, pdb);
+
+                if (t == IDA_FOUND) {
+                    return IDA_FOUND; // leave path and cube state exactly as-is -- this IS the solution
+                }
+                if (t == IDA_ABORT) {
+                    path.pop_back();
+                    current.move(face, 4 - turns);
+                    return IDA_ABORT;
+                }
                 if (t < minExcess) minExcess = t;
                 path.pop_back();
                 current.move(face, 4 - turns);
@@ -145,7 +151,7 @@ std::optional<std::vector<Move>> solveBFS(Cube start, int maxDepth, long long& n
     std::vector<BFSNode> nodes;
     nodes.push_back({start, -1, Cube::U, 0});
 
-    std::queue<std::pair<int, int>> q; // (nodeIndex, depth)
+    std::queue<std::pair<int, int>> q;
     q.push({0, 0});
 
     while (!q.empty()) {
@@ -154,7 +160,7 @@ std::optional<std::vector<Move>> solveBFS(Cube start, int maxDepth, long long& n
         ++nodesVisited;
 
         if (static_cast<long long>(nodes.size()) > nodeLimit) {
-            return std::nullopt; // hit the memory/node cap before finding a solution
+            return std::nullopt;
         }
         if (depth == maxDepth) continue;
 
@@ -190,15 +196,17 @@ std::optional<std::vector<Move>> solveBFS(Cube start, int maxDepth, long long& n
     return std::nullopt;
 }
 
-std::optional<std::vector<Move>> solveIDAStar(Cube start, const std::vector<uint8_t>& pdb, long long& nodesVisited) {
+std::optional<std::vector<Move>> solveIDAStar(Cube start, const std::vector<uint8_t>& pdb,
+                                               long long& nodesVisited, long long nodeLimit) {
     nodesVisited = 0;
     std::vector<Move> path;
     int threshold = cornerDistance(pdb, start);
 
     while (true) {
-        int t = idaRecurse(start, 0, threshold, Cube::U, false, path, nodesVisited, pdb);
+        int t = idaRecurse(start, 0, threshold, Cube::U, false, path, nodesVisited, nodeLimit, pdb);
         if (t == IDA_FOUND) return path;
-        if (t == INT_MAX) return std::nullopt; // exhausted the entire tree, no solution -- shouldn't happen for a real scramble
+        if (t == IDA_ABORT) return std::nullopt;
+        if (t == INT_MAX) return std::nullopt;
         threshold = t;
     }
 }

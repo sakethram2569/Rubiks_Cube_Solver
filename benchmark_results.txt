@@ -1,0 +1,67 @@
+Rubik's Cube Solver -- benchmark log
+Generated: Thu Aug  6 12:19:13 2026
+==========================================
+
+--- Naive search baseline: BFS / DFS / IDDFS, 8-move scrambles ---
+Scramble 1: B R2 U' L' B D L2 R2
+  DFS  : solved, 48945.0 ms, 631002507 nodes, 8 moves, verify: OK
+  IDDFS: solved, 68070.1 ms, 751215875 nodes, 8 moves, verify: OK
+  BFS  : FAILED/hit limit, 1303.7 ms, 374574 nodes
+Scramble 2: B' U' L' R U' L2 R2 U2
+  DFS  : solved, 10351.8 ms, 117466832 nodes, 8 moves, verify: OK
+  IDDFS: solved, 21095.4 ms, 237680200 nodes, 8 moves, verify: OK
+  BFS  : FAILED/hit limit, 1206.7 ms, 374574 nodes
+Scramble 3: U L' B2 U D L F' D2
+  DFS  : solved, 34349.6 ms, 387488785 nodes, 8 moves, verify: OK
+  IDDFS: solved, 59932.1 ms, 507702153 nodes, 8 moves, verify: OK
+  BFS  : FAILED/hit limit, 1560.2 ms, 374574 nodes
+Scramble 4: U' L2 R D' R D F' L'
+  DFS  : solved, 58849.3 ms, 551095207 nodes, 8 moves, verify: OK
+  IDDFS: solved, 45747.9 ms, 671308575 nodes, 8 moves, verify: OK
+  BFS  : FAILED/hit limit, 1699.0 ms, 374574 nodes
+Scramble 5: U L' F2 U R' B2 R' U
+  DFS  : solved, 25412.7 ms, 223722638 nodes, 8 moves, verify: OK
+  IDDFS: solved, 37713.8 ms, 343936006 nodes, 8 moves, verify: OK
+  BFS  : FAILED/hit limit, 1506.9 ms, 374574 nodes
+
+DFS  : 5/5 solved. avg 35581.7 ms, max 58849.3 ms.
+IDDFS: 5/5 solved. avg 46511.9 ms, max 68070.1 ms.
+BFS  : 0/5 solved.
+
+--- IDA* with corner PDB, 8-move scrambles (20 trials) ---
+  trial 1: solved, 1.2 ms, 5692 nodes, 8 moves, verify: OK
+  trial 2: solved, 20.7 ms, 142448 nodes, 8 moves, verify: OK
+  trial 3: solved, 0.8 ms, 5520 nodes, 8 moves, verify: OK
+  trial 4: solved, 2.5 ms, 16797 nodes, 8 moves, verify: OK
+  trial 5: solved, 5.8 ms, 27021 nodes, 8 moves, verify: OK
+  trial 6: solved, 0.1 ms, 438 nodes, 8 moves, verify: OK
+  trial 7: solved, 0.3 ms, 1166 nodes, 8 moves, verify: OK
+  trial 8: solved, 0.6 ms, 2647 nodes, 8 moves, verify: OK
+  trial 9: solved, 0.1 ms, 593 nodes, 8 moves, verify: OK
+  trial 10: solved, 0.1 ms, 412 nodes, 8 moves, verify: OK
+  trial 11: solved, 2.4 ms, 9006 nodes, 8 moves, verify: OK
+  trial 12: solved, 3.1 ms, 15007 nodes, 8 moves, verify: OK
+  trial 13: solved, 0.7 ms, 3563 nodes, 8 moves, verify: OK
+  trial 14: solved, 27.3 ms, 172342 nodes, 8 moves, verify: OK
+  trial 15: solved, 0.1 ms, 799 nodes, 8 moves, verify: OK
+  trial 16: solved, 8.2 ms, 53627 nodes, 8 moves, verify: OK
+  trial 17: solved, 0.1 ms, 567 nodes, 8 moves, verify: OK
+  trial 18: solved, 0.5 ms, 3689 nodes, 8 moves, verify: OK
+  trial 19: solved, 23.3 ms, 137150 nodes, 8 moves, verify: OK
+  trial 20: solved, 1.1 ms, 7232 nodes, 8 moves, verify: OK
+
+IDA* (8-move): 20/20 solved. avg 5.0 ms, max 27.3 ms.
+
+--- IDA* with corner PDB, 13-move scrambles (10 trials) ---
+  trial 1: solved, 19267.1 ms, 92486258 nodes, 13 moves, verify: OK
+  trial 2: solved, 271934.3 ms, 1301265282 nodes, 13 moves, verify: OK
+  trial 3: solved, 8647.1 ms, 56854554 nodes, 12 moves, verify: OK
+  trial 4: solved, 48943.2 ms, 308952051 nodes, 13 moves, verify: OK
+  trial 5: solved, 37011.4 ms, 192371333 nodes, 13 moves, verify: OK
+  trial 6: solved, 126126.9 ms, 589659258 nodes, 13 moves, verify: OK
+  trial 7: solved, 93289.6 ms, 457139706 nodes, 13 moves, verify: OK
+  trial 8: solved, 23357.0 ms, 113122173 nodes, 12 moves, verify: OK
+  trial 9: solved, 123399.9 ms, 589506326 nodes, 13 moves, verify: OK
+  trial 10: solved, 108607.3 ms, 545064603 nodes, 13 moves, verify: OK
+
+IDA* (13-move): 10/10 solved. avg 86058.4 ms, max 271934.3 ms.
