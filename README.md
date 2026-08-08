@@ -109,39 +109,34 @@ current path) makes it impractical at this depth without a heuristic.
   enough RAM it would eventually solve 8-move scrambles, just not on
   typical hardware.
 
-## Phase 7: bit-packed representation experiment (negative result)
+## Phase 7 / 7b: bit-packed representation experiments (two negative results)
 
-Hypothesis: replacing `Cube`'s four `std::array`-based state with a single
-bit-packed 64-bit word per piece type (`BitCube`, in `include/bitcube.h` /
-`src/bitcube.cpp`) would speed up `move()` by trading array copies for
-register-level bit-shifting.
+Hypothesis: replacing `Cube`'s array-based state with a bit-packed 64-bit
+representation would speed up `move()`.
 
-**Result: rejected.** Measured on 100 million single quarter-turns
-(Release build, `-O2`):
+**BitCube (Phase 7)** packed state into two `uint64_t`s and computed each
+move via per-field decode -> arithmetic -> re-encode. Measured **4.3x
+slower** than `Cube`. Root cause: the decode/recompute/repack cost per
+field, plus a serialized `result |= ...` accumulator chain that blocks
+compiler auto-vectorization, which `Cube`'s independent array writes get
+for free.
 
-| Representation | ns/move | Relative |
-|---|---|---|
-| `Cube` (array-based) | 37.0 | 1.0x |
-| `BitCube` (bit-packed) | 160.4 | **4.3x slower** |
+**BitCubeV2 (Phase 7b)** kept the same packed representation but replaced
+the per-field arithmetic with precomputed lookup tables (32 entries per
+slot per face, ~30KB total, built once at startup). This measured **1.61x
+faster than BitCube** -- confirming the arithmetic was a real cost -- but
+still **1.45x slower than `Cube`**. Root cause: table lookups trade cheap,
+predictable register arithmetic for data-dependent memory loads that can't
+be prefetched or vectorized, and at this operation's scale (a handful of
+shifts and a modulo), the arithmetic `Cube` does was already cheaper than
+the memory access the table requires.
 
-`BitCube` was verified bit-for-bit correct against `Cube` across 200
-scrambles of 20 moves each, checked after every individual move -- this
-is a real performance result, not a bug.
-
-**Root cause:** `BitCube::move()` builds its result via repeated
-`result |= ... << ...` into a single accumulator, creating a sequential
-data dependency between all 8 (or 12) piece updates -- the compiler can't
-reorder or vectorize that. `Cube::move()` writes to 8-12 independent array
-slots with no such dependency, which `-O2` auto-vectorizes freely. Compact
-bit-packed storage also costs an extract/decode + repack/insert round trip
-per field access, versus a single load-store for a plain array. Genuine
-bitboard speedups (as used by other solver implementations, e.g. shifting
-an entire face's stickers in one 64-bit operation) come from operating on
-*many* pieces per instruction -- not from storing per-piece state more
-compactly while still updating one piece at a time, which is what this
-experiment did. `BitCube` is kept in the repo as a documented, correct,
-properly-benchmarked test of the hypothesis; it is not used in the active
-solve path.
+Both `BitCube` and `BitCubeV2` are verified bit-for-bit correct against
+`Cube` (200 scrambles x 20 moves, checked after every individual move) and
+kept in the repo (`include/bitcube.h`, `include/bitcube2.h`) as documented,
+correct, benchmarked negative results. Neither is used in the active solve
+path -- `Cube`'s plain array representation remains the fastest of the
+three measured, and is what `search.cpp` and `pdb.cpp` use.
 
 ## Project structure
 

@@ -9,5 +9,5 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 set(CMAKE_CXX_FLAGS_RELEASE "-O2")
 
-add_executable(cube_solver src/main.cpp src/cube.cpp src/search.cpp src/pdb.cpp src/bitcube.cpp)
+add_executable(cube_solver src/main.cpp src/cube.cpp src/search.cpp src/pdb.cpp src/bitcube.cpp src/bitcube2.cpp)
 target_include_directories(cube_solver PRIVATE include)
