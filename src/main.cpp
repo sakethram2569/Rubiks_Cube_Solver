@@ -1,4 +1,5 @@
 #include "cube.h"
+#include "bitcube.h"
 #include "search.h"
 #include "pdb.h"
 #include <iostream>
@@ -7,6 +8,8 @@
 #include <vector>
 #include <fstream>
 #include <string>
+#include <random>
+#include <utility>
 
 using Clock = std::chrono::steady_clock;
 
@@ -171,10 +174,121 @@ void runFullBenchmark(const std::string& outPath) {
     std::cout << "\nFull benchmark log written to " << outPath << "\n";
 }
 
+// Phase 7: does BitCube compute the same thing as Cube, and is it faster?
+void runPhase7() {
+    std::cout << "\n=== Phase 7: BitCube correctness + raw throughput ===\n\n";
+
+    // --- Correctness first. Checked after EVERY move in each scramble,
+    // not just at the end -- a bug that happens to cancel out over a full
+    // sequence would hide from an end-only check. ---
+    const int CORRECTNESS_TRIALS = 200;
+    const int SCRAMBLE_LEN = 20;
+    bool allMatch = true;
+
+    for (int t = 0; t < CORRECTNESS_TRIALS && allMatch; ++t) {
+        ScrambleResult sc = generateScramble(SCRAMBLE_LEN);
+        Cube refCube;
+        BitCube testCube;
+
+        for (const auto& mv : sc.moves) {
+            refCube.move(mv.face, mv.turns);
+            testCube.move(static_cast<BitCube::Face>(static_cast<int>(mv.face)), mv.turns);
+
+            if (refCube.cornerPerm() != testCube.cornerPerm() ||
+                refCube.cornerOrient() != testCube.cornerOrient() ||
+                refCube.edgePerm() != testCube.edgePerm() ||
+                refCube.edgeOrient() != testCube.edgeOrient() ||
+                refCube.isSolved() != testCube.isSolved()) {
+                allMatch = false;
+                std::cout << "  MISMATCH on trial " << t << " after move "
+                          << moveToString(mv) << " -- BitCube diverged from Cube.\n";
+                break;
+            }
+        }
+    }
+
+    std::cout << "Correctness (" << CORRECTNESS_TRIALS << " scrambles x " << SCRAMBLE_LEN
+              << " moves, checked after every single move): "
+              << (allMatch ? "OK -- BitCube matches Cube exactly" : "FAILED") << "\n";
+
+    if (!allMatch) {
+        std::cout << "Stopping here -- do not trust throughput numbers from a broken implementation.\n";
+        return;
+    }
+
+    // --- Raw move throughput. Same fixed move sequence applied to both
+    // representations, no search algorithm or heuristic involved -- this
+    // isolates exactly the claim being tested: array-copy vs bit-packed word.
+    const long long NUM_MOVES = 100000000; // 100 million single quarter-turns
+
+    std::mt19937 rng(12345); // fixed seed -- identical sequence for both
+    std::uniform_int_distribution<int> faceDist(0, 5);
+    std::uniform_int_distribution<int> turnDist(1, 3);
+    std::vector<std::pair<int, int>> sequence;
+    sequence.reserve(NUM_MOVES);
+    for (long long i = 0; i < NUM_MOVES; ++i) {
+        sequence.push_back({faceDist(rng), turnDist(rng)});
+    }
+
+    Cube arrCube;
+    auto arrStart = Clock::now();
+    for (auto& mv : sequence) {
+        arrCube.move(static_cast<Cube::Face>(mv.first), mv.second);
+    }
+    double arrMs = elapsedMs(arrStart, Clock::now());
+
+    BitCube bitCubeBench;
+    auto bitStart = Clock::now();
+    for (auto& mv : sequence) {
+        bitCubeBench.move(static_cast<BitCube::Face>(mv.first), mv.second);
+    }
+    double bitMs = elapsedMs(bitStart, Clock::now());
+
+    std::cout << "\n" << NUM_MOVES << " single quarter-turns applied to each representation:\n";
+    std::cout << "  Cube (array-based):   " << std::fixed << std::setprecision(1) << arrMs
+              << " ms (" << std::setprecision(2) << (arrMs * 1e6 / NUM_MOVES) << " ns/move)\n";
+    std::cout << "  BitCube (bit-packed): " << std::setprecision(1) << bitMs
+              << " ms (" << std::setprecision(2) << (bitMs * 1e6 / NUM_MOVES) << " ns/move)\n";
+    std::cout << "  Speedup: " << (arrMs / bitMs) << "x\n";
+
+    // --- isSolved() throughput. Called once per node during search too,
+    // right alongside move(), so its cost matters just as much. Using the
+    // already-scrambled cubes from above so isSolved() does real
+    // comparison work instead of short-circuiting on an already-solved cube.
+    const long long NUM_CHECKS = 100000000;
+    long long dummy = 0; // prevents the compiler from optimizing the loop away
+
+    auto arrCheckStart = Clock::now();
+    for (long long i = 0; i < NUM_CHECKS; ++i) {
+        dummy += arrCube.isSolved() ? 1 : 0;
+    }
+    double arrCheckMs = elapsedMs(arrCheckStart, Clock::now());
+
+    auto bitCheckStart = Clock::now();
+    for (long long i = 0; i < NUM_CHECKS; ++i) {
+        dummy += bitCubeBench.isSolved() ? 1 : 0;
+    }
+    double bitCheckMs = elapsedMs(bitCheckStart, Clock::now());
+
+    std::cout << "\n" << NUM_CHECKS << " isSolved() calls on a scrambled (non-solved) cube:\n";
+    std::cout << "  Cube:    " << std::fixed << std::setprecision(1) << arrCheckMs << " ms\n";
+    std::cout << "  BitCube: " << bitCheckMs << " ms\n";
+    std::cout << "  Speedup: " << std::setprecision(2) << (arrCheckMs / bitCheckMs) << "x\n";
+    std::cout << "  (ignore this number, it just stops the compiler from deleting the loop: " << dummy << ")\n";
+}
+
 int main(int argc, char** argv) {
     bool fullBenchmark = false;
+    bool phase7 = false;
     for (int i = 1; i < argc; ++i) {
-        if (std::string(argv[i]) == "--benchmark") fullBenchmark = true;
+        std::string arg = argv[i];
+        if (arg == "--benchmark") fullBenchmark = true;
+        if (arg == "--phase7") phase7 = true;
+    }
+
+    if (phase7) {
+        runPhase7();
+        return 0;
     }
 
     if (fullBenchmark) {
@@ -194,7 +308,7 @@ int main(int argc, char** argv) {
                   << r.solutionLen << " moves, verify: "
                   << (r.verified ? "OK" : "*** BROKEN ***") << "\n";
     }
-    std::cout << "\nRun with --benchmark for the full evidence log used for the CV claims.\n";
+    std::cout << "\nRun with --benchmark for the full evidence log, or --phase7 for the BitCube correctness/throughput check.\n";
 
     return 0;
 }

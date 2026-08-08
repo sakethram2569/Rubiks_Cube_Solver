@@ -9,15 +9,11 @@ public:
     static const int NUM_CORNERS = 8;
     static const int NUM_EDGES = 12;
 
-    // Singmaster notation: 8 corner slots, 12 edge slots
     enum Corner { URF, UFL, ULB, UBR, DFR, DLF, DBL, DRB };
     enum Edge { UR, UF, UL, UB, DR, DF, DL, DB, FR, FL, BL, BR };
-
-    // The six faces. A "move" is a face + how many clockwise quarter turns:
-    // 1 = clockwise, 2 = 180 degrees, 3 = counterclockwise
     enum Face { U, D, L, R, F, B };
 
-    Cube(); // builds a solved cube
+    Cube();
 
     bool operator==(const Cube& other) const;
     bool operator!=(const Cube& other) const;
@@ -27,16 +23,20 @@ public:
     bool isSolved() const;
     void move(Face face, int turns);
 
-    // Read-only access to corner state -- needed by the pattern database
-    // (Phase 4) to index into its distance table.
     std::array<int, NUM_CORNERS> cornerPerm() const { return cp; }
     std::array<int, NUM_CORNERS> cornerOrient() const { return co; }
 
+    // Added for Phase 7 -- cross-checking BitCube's bit-packed edge state
+    // against this array-based implementation requires reading edges too,
+    // not just corners. Read-only, doesn't touch move()/isSolved() at all.
+    std::array<int, NUM_EDGES> edgePerm() const { return ep; }
+    std::array<int, NUM_EDGES> edgeOrient() const { return eo; }
+
 private:
-    std::array<int, NUM_CORNERS> cp; // corner permutation: which piece is at slot i
-    std::array<int, NUM_CORNERS> co; // corner orientation: 0, 1, or 2
-    std::array<int, NUM_EDGES> ep;   // edge permutation
-    std::array<int, NUM_EDGES> eo;   // edge orientation: 0 or 1
+    std::array<int, NUM_CORNERS> cp;
+    std::array<int, NUM_CORNERS> co;
+    std::array<int, NUM_EDGES> ep;
+    std::array<int, NUM_EDGES> eo;
 };
 
 #endif

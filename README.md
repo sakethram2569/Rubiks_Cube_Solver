@@ -109,6 +109,40 @@ current path) makes it impractical at this depth without a heuristic.
   enough RAM it would eventually solve 8-move scrambles, just not on
   typical hardware.
 
+## Phase 7: bit-packed representation experiment (negative result)
+
+Hypothesis: replacing `Cube`'s four `std::array`-based state with a single
+bit-packed 64-bit word per piece type (`BitCube`, in `include/bitcube.h` /
+`src/bitcube.cpp`) would speed up `move()` by trading array copies for
+register-level bit-shifting.
+
+**Result: rejected.** Measured on 100 million single quarter-turns
+(Release build, `-O2`):
+
+| Representation | ns/move | Relative |
+|---|---|---|
+| `Cube` (array-based) | 37.0 | 1.0x |
+| `BitCube` (bit-packed) | 160.4 | **4.3x slower** |
+
+`BitCube` was verified bit-for-bit correct against `Cube` across 200
+scrambles of 20 moves each, checked after every individual move -- this
+is a real performance result, not a bug.
+
+**Root cause:** `BitCube::move()` builds its result via repeated
+`result |= ... << ...` into a single accumulator, creating a sequential
+data dependency between all 8 (or 12) piece updates -- the compiler can't
+reorder or vectorize that. `Cube::move()` writes to 8-12 independent array
+slots with no such dependency, which `-O2` auto-vectorizes freely. Compact
+bit-packed storage also costs an extract/decode + repack/insert round trip
+per field access, versus a single load-store for a plain array. Genuine
+bitboard speedups (as used by other solver implementations, e.g. shifting
+an entire face's stickers in one 64-bit operation) come from operating on
+*many* pieces per instruction -- not from storing per-piece state more
+compactly while still updating one piece at a time, which is what this
+experiment did. `BitCube` is kept in the repo as a documented, correct,
+properly-benchmarked test of the hypothesis; it is not used in the active
+solve path.
+
 ## Project structure
 
 ```
